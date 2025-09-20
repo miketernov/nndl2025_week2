@@ -79,34 +79,37 @@ function readFile(file) {
 }
 
 // Parse CSV text to array of objects
+// Надёжный парсер CSV: понимает "quoted, fields", CRLF и убирает BOM
 function parseCSV(text){
   const rows = [];
   let i = 0, field = '', row = [], inQuotes = false;
 
+  // убираем возможный BOM
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
   const pushField = () => { row.push(inQuotes ? field.replace(/""/g, '"') : field); field = ''; };
-  const pushRow = () => { rows.push(row); row = []; };
+  const pushRow   = () => { rows.push(row); row = []; };
 
   while (i < text.length){
     const ch = text[i];
     if (inQuotes){
       if (ch === '"'){
-        if (text[i+1] === '"'){ field += '"'; i++; } // экранированная кавычка
-        else inQuotes = false;
+        if (text[i+1] === '"'){ field += '"'; i++; } else inQuotes = false;
       } else field += ch;
     } else {
       if (ch === '"') inQuotes = true;
       else if (ch === ',') pushField();
       else if (ch === '\n'){ pushField(); pushRow(); }
-      else if (ch === '\r'){ /* пропускаем CR в CRLF */ }
-      else field += ch;
+      else if (ch !== '\r') field += ch; // пропускаем CR
     }
     i++;
   }
-  // финальный флеш
   if (field.length || row.length){ pushField(); pushRow(); }
 
-  // в объектную форму
-  const headers = rows.shift().map(h => h.trim());
+  // в объектную форму + нормализация заголовков
+  const headers = rows.shift()
+    .map(h => String(h || '').trim().replace(/^\uFEFF/, '')); // trim + BOM
+
   return rows
     .filter(r => r.length && r.some(v => v !== ''))
     .map(r => {
@@ -121,6 +124,7 @@ function parseCSV(text){
       return obj;
     });
 }
+
 
 // Inspect the loaded data
 function inspectData() {
