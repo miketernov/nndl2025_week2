@@ -37,6 +37,26 @@ async function loadData() {
         // Load test data
         const testText = await readFile(testFile);
         testData = parseCSV(testText);
+        const norm = r => {
+  const o = {...r};
+  // числовые поля → в Number (или null, если пусто)
+  ['Survived','Pclass','Age','SibSp','Parch','Fare','PassengerId'].forEach(k=>{
+    if (o[k] !== null && o[k] !== undefined && o[k] !== '') {
+      const n = Number(o[k]);
+      o[k] = Number.isFinite(n) ? n : null;
+    } else {
+      o[k] = null;
+    }
+  });
+  // строковые поля → почистить пробелы/регистр
+  if (o.Sex != null)      o.Sex = String(o.Sex).trim().toLowerCase();
+  if (o.Embarked != null) o.Embarked = String(o.Embarked).trim().toUpperCase();
+  return o;
+};
+
+trainData = trainData.map(norm);
+testData  = testData.map(norm);
+
         
         statusDiv.innerHTML = `Data loaded successfully! Training: ${trainData.length} samples, Test: ${testData.length} samples`;
         
@@ -170,58 +190,44 @@ function createPreviewTable(data) {
 
 // Create visualizations using tfjs-vis
 function createVisualizations() {
-  const normSex = v => (v == null ? null : String(v).trim().toLowerCase());
-  const normPcl = v => (v == null ? null : Number(v)); // 1/2/3 как числа
-  const normY   = v => (v == null ? null : Number(v)); // 0/1 как числа
-
-  const byKey = (rows, keyFn) => {
-    const m = new Map(); // key -> {surv:0, total:0}
+  // агрегатор с приведением типов и защитой от деления на 0
+  const aggRate = (rows, keyGetter) => {
+    const map = new Map(); // key -> {surv:0, total:0}
     for (const r of rows) {
-      const sex = normSex(r.Sex);
-      const pcl = normPcl(r.Pclass);
-      const y   = normY(r.Survived);
-      if (keyFn === 'sex') {
-        if (sex == null || y == null || isNaN(y)) continue;
-        const k = sex;
-        if (!m.has(k)) m.set(k, {surv:0, total:0});
-        m.get(k).total++;
-        if (y === 1) m.get(k).surv++;
-      } else {
-        if (pcl == null || y == null || isNaN(y)) continue;
-        const k = pcl;
-        if (!m.has(k)) m.set(k, {surv:0, total:0});
-        m.get(k).total++;
-        if (y === 1) m.get(k).surv++;
-      }
+      const key = keyGetter(r);
+      const y = Number(r.Survived);
+      if (key == null || !Number.isFinite(y)) continue;
+      if (!map.has(key)) map.set(key, {surv:0, total:0});
+      const item = map.get(key);
+      item.total++;
+      if (y === 1) item.surv++;
     }
-    return Array.from(m.entries()).map(([k, v]) => ({
-      x: String(k),
-      y: v.total ? (v.surv / v.total) * 100 : 0
-    })).sort((a,b)=> (a.x > b.x ? 1 : -1));
+    return Array.from(map.entries())
+      .map(([k,v]) => ({ x: String(k), y: v.total ? (v.surv/v.total)*100 : 0 }))
+      .sort((a,b)=> (a.x > b.x ? 1 : -1));
   };
 
-  const sexData = byKey(trainData, 'sex');
-  const pclData = byKey(trainData, 'pclass');
+  const sexData    = aggRate(trainData, r => r.Sex);     // 'male' | 'female'
+  const pclassData = aggRate(trainData, r => r.Pclass);  // 1 | 2 | 3
 
-  // На всякий случай лог в консоль
   console.log('Sex chart data:', sexData);
-  console.log('Pclass chart data:', pclData);
+  console.log('Pclass chart data:', pclassData);
 
   tfvis.render.barchart(
     { name: 'Survival Rate by Sex', tab: 'Charts' },
     sexData,
-    { xLabel: 'Sex', yLabel: 'Survival Rate (%)', yAxisDomain: [0, 100] }
+    { xLabel: 'Sex', yLabel: 'Survival Rate (%)', yAxisDomain:[0,100] }
   );
-
   tfvis.render.barchart(
     { name: 'Survival Rate by Passenger Class', tab: 'Charts' },
-    pclData,
-    { xLabel: 'Passenger Class', yLabel: 'Survival Rate (%)', yAxisDomain: [0, 100] }
+    pclassData,
+    { xLabel: 'Passenger Class', yLabel: 'Survival Rate (%)', yAxisDomain:[0,100] }
   );
 
   const chartsDiv = document.getElementById('charts');
-  chartsDiv.innerHTML = '<p class="note">Charts rendered in tfjs-vis visor (кнопка снизу справа).</p>';
+  chartsDiv.innerHTML = '<p class="note">Charts are in the tfjs-vis visor (кнопка снизу справа).</p>';
 }
+
 
 
 // Preprocess the data
