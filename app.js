@@ -574,9 +574,12 @@ async function plotROC(trueLabels, predictions) {
     
     // Calculate AUC (approximate using trapezoidal rule)
     let auc = 0;
-    for (let i = 1; i < rocData.length; i++) {
-        auc += (rocData[i].fpr - rocData[i-1].fpr) * (rocData[i].tpr + rocData[i-1].tpr) / 2;
-    }
+for (let i = 1; i < rocData.length; i++) {
+    const width = rocData[i].fpr - rocData[i-1].fpr;
+    const height = (rocData[i].tpr + rocData[i-1].tpr) / 2;
+    auc += width * height;
+}
+auc = Math.abs(auc);
     
     // Plot ROC curve
     tfvis.render.linechart(
