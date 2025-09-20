@@ -170,61 +170,59 @@ function createPreviewTable(data) {
 
 // Create visualizations using tfjs-vis
 function createVisualizations() {
-    const chartsDiv = document.getElementById('charts');
-    chartsDiv.innerHTML = '<h3>Data Visualizations</h3>';
-    
-    // Survival by Sex
-    const survivalBySex = {};
-    trainData.forEach(row => {
-        if (row.Sex && row.Survived !== undefined) {
-            if (!survivalBySex[row.Sex]) {
-                survivalBySex[row.Sex] = { survived: 0, total: 0 };
-            }
-            survivalBySex[row.Sex].total++;
-            if (row.Survived === 1) {
-                survivalBySex[row.Sex].survived++;
-            }
-        }
-    });
-    
-    const sexData = Object.entries(survivalBySex).map(([sex, stats]) => ({
-        sex,
-        survivalRate: (stats.survived / stats.total) * 100
-    }));
-    
-    tfvis.render.barchart(
-        { name: 'Survival Rate by Sex', tab: 'Charts' },
-        sexData.map(d => ({ x: d.sex, y: d.survivalRate })),
-        { xLabel: 'Sex', yLabel: 'Survival Rate (%)' }
-    );
-    
-    // Survival by Pclass
-    const survivalByPclass = {};
-    trainData.forEach(row => {
-        if (row.Pclass !== undefined && row.Survived !== undefined) {
-            if (!survivalByPclass[row.Pclass]) {
-                survivalByPclass[row.Pclass] = { survived: 0, total: 0 };
-            }
-            survivalByPclass[row.Pclass].total++;
-            if (row.Survived === 1) {
-                survivalByPclass[row.Pclass].survived++;
-            }
-        }
-    });
-    
-    const pclassData = Object.entries(survivalByPclass).map(([pclass, stats]) => ({
-        pclass: `Class ${pclass}`,
-        survivalRate: (stats.survived / stats.total) * 100
-    }));
-    
-    tfvis.render.barchart(
-        { name: 'Survival Rate by Passenger Class', tab: 'Charts' },
-        pclassData.map(d => ({ x: d.pclass, y: d.survivalRate })),
-        { xLabel: 'Passenger Class', yLabel: 'Survival Rate (%)' }
-    );
-    
-    chartsDiv.innerHTML += '<p>Charts are displayed in the tfjs-vis visor. Click the button in the bottom right to view.</p>';
+  const normSex = v => (v == null ? null : String(v).trim().toLowerCase());
+  const normPcl = v => (v == null ? null : Number(v)); // 1/2/3 как числа
+  const normY   = v => (v == null ? null : Number(v)); // 0/1 как числа
+
+  const byKey = (rows, keyFn) => {
+    const m = new Map(); // key -> {surv:0, total:0}
+    for (const r of rows) {
+      const sex = normSex(r.Sex);
+      const pcl = normPcl(r.Pclass);
+      const y   = normY(r.Survived);
+      if (keyFn === 'sex') {
+        if (sex == null || y == null || isNaN(y)) continue;
+        const k = sex;
+        if (!m.has(k)) m.set(k, {surv:0, total:0});
+        m.get(k).total++;
+        if (y === 1) m.get(k).surv++;
+      } else {
+        if (pcl == null || y == null || isNaN(y)) continue;
+        const k = pcl;
+        if (!m.has(k)) m.set(k, {surv:0, total:0});
+        m.get(k).total++;
+        if (y === 1) m.get(k).surv++;
+      }
+    }
+    return Array.from(m.entries()).map(([k, v]) => ({
+      x: String(k),
+      y: v.total ? (v.surv / v.total) * 100 : 0
+    })).sort((a,b)=> (a.x > b.x ? 1 : -1));
+  };
+
+  const sexData = byKey(trainData, 'sex');
+  const pclData = byKey(trainData, 'pclass');
+
+  // На всякий случай лог в консоль
+  console.log('Sex chart data:', sexData);
+  console.log('Pclass chart data:', pclData);
+
+  tfvis.render.barchart(
+    { name: 'Survival Rate by Sex', tab: 'Charts' },
+    sexData,
+    { xLabel: 'Sex', yLabel: 'Survival Rate (%)', yAxisDomain: [0, 100] }
+  );
+
+  tfvis.render.barchart(
+    { name: 'Survival Rate by Passenger Class', tab: 'Charts' },
+    pclData,
+    { xLabel: 'Passenger Class', yLabel: 'Survival Rate (%)', yAxisDomain: [0, 100] }
+  );
+
+  const chartsDiv = document.getElementById('charts');
+  chartsDiv.innerHTML = '<p class="note">Charts rendered in tfjs-vis visor (кнопка снизу справа).</p>';
 }
+
 
 // Preprocess the data
 function preprocessData() {
