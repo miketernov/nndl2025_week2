@@ -59,23 +59,46 @@ function readFile(file) {
 }
 
 // Parse CSV text to array of objects
-function parseCSV(csvText) {
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    const headers = lines[0].split(',').map(header => header.trim());
-    
-    return lines.slice(1).map(line => {
-        const values = line.split(',').map(value => value.trim());
-        const obj = {};
-        headers.forEach((header, i) => {
-            // Handle missing values (empty strings)
-            obj[header] = values[i] === '' ? null : values[i];
-            
-            // Convert numerical values to numbers if possible
-            if (!isNaN(obj[header]) && obj[header] !== null) {
-                obj[header] = parseFloat(obj[header]);
-            }
-        });
-        return obj;
+function parseCSV(text){
+  const rows = [];
+  let i = 0, field = '', row = [], inQuotes = false;
+
+  const pushField = () => { row.push(inQuotes ? field.replace(/""/g, '"') : field); field = ''; };
+  const pushRow = () => { rows.push(row); row = []; };
+
+  while (i < text.length){
+    const ch = text[i];
+    if (inQuotes){
+      if (ch === '"'){
+        if (text[i+1] === '"'){ field += '"'; i++; } // экранированная кавычка
+        else inQuotes = false;
+      } else field += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') pushField();
+      else if (ch === '\n'){ pushField(); pushRow(); }
+      else if (ch === '\r'){ /* пропускаем CR в CRLF */ }
+      else field += ch;
+    }
+    i++;
+  }
+  // финальный флеш
+  if (field.length || row.length){ pushField(); pushRow(); }
+
+  // в объектную форму
+  const headers = rows.shift().map(h => h.trim());
+  return rows
+    .filter(r => r.length && r.some(v => v !== ''))
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, idx) => {
+        let v = r[idx] ?? '';
+        if (v === '') v = null;
+        // число?
+        if (v !== null && !isNaN(v)) v = parseFloat(v);
+        obj[h] = v;
+      });
+      return obj;
     });
 }
 
