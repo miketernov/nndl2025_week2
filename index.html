@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Titanic TF.js — Browser-only Binary Classifier</title>
+
+  <!-- TensorFlow.js + tfjs-vis (latest) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis@latest"></script>
+
+  <style>
+    :root{
+      --bg:#0f172a;        /* slate-900 */
+      --panel:#111827;     /* gray-900 */
+      --muted:#94a3b8;     /* slate-400 */
+      --text:#e5e7eb;      /* gray-200 */
+      --accent:#22c55e;    /* green-500 */
+      --danger:#ef4444;    /* red-500 */
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 
+      "Apple Color Emoji","Segoe UI Emoji";
+      background:linear-gradient(180deg, #0b1220 0%, #0f172a 60%, #0b1220 100%);
+      color:var(--text);
+    }
+    header{
+      padding:24px 16px; text-align:center; border-bottom:1px solid rgba(255,255,255,.06);
+    }
+    header h1{ margin:.2rem 0 .3rem; font-size:1.6rem;}
+    header p{ margin:0; color:var(--muted); font-size:.95rem}
+
+    .container{ padding:16px; max-width:1200px; margin:0 auto; }
+    .grid{
+      display:grid; gap:16px;
+      grid-template-columns: repeat(12, 1fr);
+    }
+    .card{
+      grid-column:span 12;
+      background:rgba(17,24,39,.85);
+      border:1px solid rgba(255,255,255,.06);
+      border-radius:16px; padding:16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.02);
+      backdrop-filter: blur(4px);
+    }
+    .card h2{ margin:0 0 8px; font-size:1.25rem;}
+    .card p.desc{ margin:.25rem 0 1rem; color:var(--muted); font-size:.95rem}
+
+    @media (min-width: 900px){
+      .col-6{ grid-column: span 6; }
+      .col-4{ grid-column: span 4; }
+      .col-8{ grid-column: span 8; }
+    }
+
+    .row{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    label{ font-size:.95rem; color:var(--muted); margin-right:8px;}
+    input[type="file"]{ color:var(--muted); }
+    input[type="checkbox"]{ transform: translateY(2px); }
+
+    button{
+      background:linear-gradient(180deg, #22c55e, #16a34a);
+      color:#04130a; border:none; padding:10px 14px; border-radius:10px; font-weight:700;
+      cursor:pointer; box-shadow:0 10px 18px rgba(34,197,94,.22);
+    }
+    button.secondary{
+      background:linear-gradient(180deg, #64748b, #475569);
+      color:#e5e7eb; box-shadow:none;
+    }
+    button.danger{
+      background:linear-gradient(180deg, #ef4444, #b91c1c);
+      color:#fff;
+    }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .kv{ display:grid; grid-template-columns: 160px 1fr; gap:8px; margin:.25rem 0; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+
+    table{
+      width:100%; border-collapse: collapse; font-size:.92rem; border-radius:10px; overflow:hidden;
+      border:1px solid rgba(255,255,255,.06);
+    }
+    th, td{ padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.06); }
+    th{ text-align:left; color:#cbd5e1; background:rgba(255,255,255,.03);}
+    tr:nth-child(even){ background:rgba(255,255,255,.02);}
+
+    .flex{ display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
+    .muted{ color:var(--muted); }
+    .pill{ font-size:.8rem; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); }
+    .vis-host{ border:1px dashed rgba(255,255,255,.12); border-radius:10px; padding:6px; }
+
+    .slider-wrap{ display:flex; align-items:center; gap:12px; }
+    input[type="range"]{ width:220px; }
+    .metrics-grid{ display:grid; grid-template-columns: repeat(4, minmax(120px,1fr)); gap:10px; }
+    .metric{ background:rgba(255,255,255,.06); padding:10px; border-radius:10px; text-align:center; }
+    .metric .val{ font-size:1.1rem; font-weight:700; }
+    .footnote{ color:var(--muted); font-size:.9rem; margin-top:10px;}
+
+    pre{ white-space:pre-wrap; background:#0b1220; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,.06); }
+    .small{ font-size:.85rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🚢 Titanic — TensorFlow.js (Browser-only) Classifier</h1>
+    <p>Load Kaggle <em>train.csv</em>/<em>test.csv</em>, train a shallow model, inspect metrics, predict, and export — all client-side.</p>
+  </header>
+
+  <div class="container">
+    <div class="grid">
+
+      <!-- Data Load -->
+      <section class="card col-6" id="section-load">
+        <h2>1) Data Load</h2>
+        <p class="desc">Select the original Kaggle CSVs. Nothing is uploaded anywhere — parsing happens locally in your browser.</p>
+        <div class="row">
+          <label for="trainFile">Train CSV:</label>
+          <input type="file" id="trainFile" accept=".csv" />
+          <label for="testFile">Test CSV:</label>
+          <input type="file" id="testFile" accept=".csv" />
+          <button id="btnLoad">Load &amp; Inspect</button>
+          <button id="btnReset" class="secondary">Reset</button>
+        </div>
+        <div id="loadSummary" style="margin-top:10px"></div>
+      </section>
+
+      <!-- Preprocessing -->
+      <section class="card col-6" id="section-pre">
+        <h2>2) Preprocessing</h2>
+        <p class="desc">Impute Age (median), Embarked (mode). Standardize Age &amp; Fare. One-hot Sex, Pclass, Embarked. Optional FamilySize/IsAlone features.</p>
+        <div class="row">
+          <label><input type="checkbox" id="chkFamily" checked /> Add FamilySize &amp; IsAlone</label>
+          <button id="btnPreprocess">Run Preprocessing</button>
+        </div>
+        <div class="kv small" id="preSummary" style="margin-top:10px"></div>
+      </section>
+
+      <!-- Preview / EDA -->
+      <section class="card col-12" id="section-preview">
+        <h2>Preview &amp; Missingness</h2>
+        <div class="flex">
+          <span class="pill">Target: <strong>Survived</strong></span>
+          <span class="pill">Features: Pclass, Sex, Age, SibSp, Parch, Fare, Embarked</span>
+          <span class="pill">Excluded: PassengerId</span>
+        </div>
+        <div id="previewTable" style="margin-top:12px"></div>
+        <div id="missingSummary" class="small" style="margin-top:8px"></div>
+
+        <div style="margin-top:16px">
+          <h3 style="margin:.25rem 0">Exploration</h3>
+          <div class="grid">
+            <div class="col-6 vis-host">
+              <div id="chart-sex"></div>
+            </div>
+            <div class="col-6 vis-host">
+              <div id="chart-pclass"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Model -->
+      <section class="card col-6" id="section-model">
+        <h2>3) Model</h2>
+        <p class="desc">Shallow binary classifier: Dense(16, ReLU) → Dense(1, Sigmoid).</p>
+        <div class="row">
+          <button id="btnBuild">Build Model</button>
+          <button id="btnSummary" class="secondary">Show Summary</button>
+        </div>
+        <pre id="modelSummary" class="mono" style="margin-top:10px"></pre>
+      </section>
+
+      <!-- Training -->
+      <section class="card col-6" id="section-train">
+        <h2>4) Training</h2>
+        <p class="desc">80/20 stratified split, 50 epochs, batch 32, early stopping on val_loss (patience=5). Live plots via tfjs-vis.</p>
+        <div class="row">
+          <button id="btnTrain">Train</button>
+          <button id="btnEvaluate" class="secondary">Evaluate</button>
+        </div>
+        <div id="trainPlots" class="vis-host" style="margin-top:10px"></div>
+      </section>
+
+      <!-- Metrics -->
+      <section class="card col-12" id="section-metrics">
+        <h2>5) Metrics — ROC &amp; Threshold</h2>
+        <div class="grid">
+          <div class="col-6 vis-host">
+            <div id="rocPlot"></div>
+          </div>
+          <div class="col-6">
+            <div class="slider-wrap">
+              <label for="thresholdSlider">Threshold:</label>
+              <input type="range" id="thresholdSlider" min="0" max="1" step="0.01" value="0.5" />
+              <span id="thresholdVal" class="pill">0.50</span>
+              <button id="btnDefault05" class="secondary small">0.50</button>
+              <button id="btnYouden" class="secondary small">Youden</button>
+            </div>
+            <div id="confusion" style="margin-top:12px">
+              <div class="metrics-grid">
+                <div class="metric"><div>TP</div><div class="val" id="mTP">–</div></div>
+                <div class="metric"><div>FP</div><div class="val" id="mFP">–</div></div>
+                <div class="metric"><div>TN</div><div class="val" id="mTN">–</div></div>
+                <div class="metric"><div>FN</div><div class="val" id="mFN">–</div></div>
+              </div>
+              <div class="metrics-grid" style="margin-top:10px">
+                <div class="metric"><div>Precision</div><div class="val" id="mPrec">–</div></div>
+                <div class="metric"><div>Recall</div><div class="val" id="mRec">–</div></div>
+                <div class="metric"><div>F1</div><div class="val" id="mF1">–</div></div>
+                <div class="metric"><div>ROC-AUC</div><div class="val" id="mAUC">–</div></div>
+              </div>
+              <div class="footnote">Tip: adjust threshold to trade off Precision vs Recall.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Prediction -->
+      <section class="card col-6" id="section-predict">
+        <h2>6) Prediction</h2>
+        <p class="desc">Predict probabilities on <em>test.csv</em> and convert to Survived using the current threshold.</p>
+        <div class="row">
+          <button id="btnPredict">Predict Test</button>
+        </div>
+        <div id="predSummary" class="small" style="margin-top:10px"></div>
+      </section>
+
+      <!-- Export -->
+      <section class="card col-6" id="section-export">
+        <h2>7) Export</h2>
+        <p class="desc">Download model files &amp; CSV outputs for Kaggle submission.</p>
+        <div class="row">
+          <button id="btnSaveModel">Save Model</button>
+          <button id="btnDownloadSubmission" class="secondary">Download submission.csv</button>
+          <button id="btnDownloadProbs" class="secondary">Download probabilities.csv</button>
+        </div>
+        <div id="exportNote" class="footnote" style="margin-top:10px"></div>
+      </section>
+
+      <!-- Deployment notes -->
+      <section class="card col-12" id="section-deploy">
+        <h2>Deployment Notes</h2>
+        <ol class="small">
+          <li>Create a public GitHub repository.</li>
+          <li>Add <strong>index.html</strong> and <strong>app.js</strong> at the repo root (no build step required).</li>
+          <li>Commit &amp; push to the <strong>main</strong> branch.</li>
+          <li>In Repo &rarr; Settings &rarr; Pages: Source = <strong>Deploy from a branch</strong>, Branch = <strong>main</strong>, Folder = <strong>/root</strong>.</li>
+          <li>Open the Pages URL to use the app.</li>
+        </ol>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- App logic -->
+  <script src="app.js"></script>
+</body>
+</html>
