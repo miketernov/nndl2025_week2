@@ -601,41 +601,38 @@ auc = Math.abs(auc);
 
 // Predict on test data
 async function predict() {
-    if (!model || !preprocessedTestData) {
-        alert('Please train model first.');
-        return;
-    }
-    
-    const outputDiv = document.getElementById('prediction-output');
-    outputDiv.innerHTML = 'Making predictions...';
-    
-    try {
-        // Convert test features to tensor
-        const testFeatures = tf.tensor2d(preprocessedTestData.features);
-        
-        // Make predictions
-        testPredictions = model.predict(testFeatures);
-        const predValues = testPredictions.arraySync();
-        
-        // Create prediction results
-        const results = preprocessedTestData.passengerIds.map((id, i) => ({
-            PassengerId: id,
-            Survived: predValues[i] >= 0.5 ? 1 : 0,
-            Probability: predValues[i]
-        }));
-        
-        // Show first 10 predictions
-        outputDiv.innerHTML = '<h3>Prediction Results (First 10 Rows)</h3>';
-        outputDiv.appendChild(createPredictionTable(results.slice(0, 10)));
-        
-        outputDiv.innerHTML += `<p>Predictions completed! Total: ${results.length} samples</p>`;
-        
-        // Enable the export button
-        document.getElementById('export-btn').disabled = false;
-    } catch (error) {
-        outputDiv.innerHTML = `Error during prediction: ${error.message}`;
-        console.error(error);
-    }
+  if (!model || !preprocessedTestData) {
+    alert('Please train model first.');
+    return;
+  }
+
+  const outputDiv = document.getElementById('prediction-output');
+  outputDiv.innerHTML = 'Making predictions...';
+
+  try {
+    const testFeatures = tf.tensor2d(preprocessedTestData.features);
+
+    // [[p], [p], ...]  ->  [p, p, ...]
+    testPredictions = model.predict(testFeatures);
+    const pred2D = testPredictions.arraySync();
+    const probs  = pred2D.map(v => Array.isArray(v) ? Number(v[0]) : Number(v));
+
+    const results = preprocessedTestData.passengerIds.map((id, i) => ({
+      PassengerId: id,
+      Survived: probs[i] >= 0.5 ? 1 : 0,
+      Probability: probs[i]       // тут уже скаляр (число)
+    }));
+
+    // превью
+    outputDiv.innerHTML = '<h3>Prediction Results (First 10 Rows)</h3>';
+    outputDiv.appendChild(createPredictionTable(results.slice(0, 10)));
+    outputDiv.innerHTML += `<p>Predictions completed! Total: ${results.length} samples</p>`;
+
+    document.getElementById('export-btn').disabled = false;
+  } catch (error) {
+    outputDiv.innerHTML = `Error during prediction: ${error.message}`;
+    console.error(error);
+  }
 }
 
 // Create prediction table
@@ -667,54 +664,42 @@ function createPredictionTable(data) {
 
 // Export results
 async function exportResults() {
-    if (!testPredictions || !preprocessedTestData) {
-        alert('Please make predictions first.');
-        return;
-    }
-    
-    const statusDiv = document.getElementById('export-status');
-    statusDiv.innerHTML = 'Exporting results...';
-    
-    try {
-        // Get predictions
-        const predValues = testPredictions.arraySync();
-        
-        // Create submission CSV (PassengerId, Survived)
-        let submissionCSV = 'PassengerId,Survived\n';
-        preprocessedTestData.passengerIds.forEach((id, i) => {
-            submissionCSV += `${id},${predValues[i] >= 0.5 ? 1 : 0}\n`;
-        });
-        
-        // Create probabilities CSV (PassengerId, Probability)
-        let probabilitiesCSV = 'PassengerId,Probability\n';
-        preprocessedTestData.passengerIds.forEach((id, i) => {
-            probabilitiesCSV += `${id},${predValues[i].toFixed(6)}\n`;
-        });
-        
-        // Create download links
-        const submissionLink = document.createElement('a');
-        submissionLink.href = URL.createObjectURL(new Blob([submissionCSV], { type: 'text/csv' }));
-        submissionLink.download = 'submission.csv';
-        
-        const probabilitiesLink = document.createElement('a');
-        probabilitiesLink.href = URL.createObjectURL(new Blob([probabilitiesCSV], { type: 'text/csv' }));
-        probabilitiesLink.download = 'probabilities.csv';
-        
-        // Trigger downloads
-        submissionLink.click();
-        probabilitiesLink.click();
-        
-        // Save model
-        await model.save('downloads://titanic-tfjs-model');
-        
-        statusDiv.innerHTML = `
-            <p>Export completed!</p>
-            <p>Downloaded: submission.csv (Kaggle submission format)</p>
-            <p>Downloaded: probabilities.csv (Prediction probabilities)</p>
-            <p>Model saved to browser downloads</p>
-        `;
-    } catch (error) {
-        statusDiv.innerHTML = `Error during export: ${error.message}`;
-        console.error(error);
-    }
+  if (!testPredictions || !preprocessedTestData) {
+    alert('Please make predictions first.');
+    return;
+  }
+
+  const statusDiv = document.getElementById('export-status');
+  statusDiv.innerHTML = 'Exporting results...';
+
+  try {
+    const pred2D = testPredictions.arraySync();
+    const probs  = pred2D.map(v => Array.isArray(v) ? Number(v[0]) : Number(v));
+
+    // submission.csv
+    let submissionCSV = 'PassengerId,Survived\n';
+    preprocessedTestData.passengerIds.forEach((id, i) => {
+      submissionCSV += `${id},${probs[i] >= 0.5 ? 1 : 0}\n`;
+    });
+
+    // probabilities.csv
+    let probabilitiesCSV = 'PassengerId,Probability\n';
+    preprocessedTestData.passengerIds.forEach((id, i) => {
+      probabilitiesCSV += `${id},${probs[i].toFixed(6)}\n`;
+    });
+
+    const a1 = document.createElement('a');
+    a1.href = URL.createObjectURL(new Blob([submissionCSV], {type:'text/csv'}));
+    a1.download = 'submission.csv'; a1.click();
+
+    const a2 = document.createElement('a');
+    a2.href = URL.createObjectURL(new Blob([probabilitiesCSV], {type:'text/csv'}));
+    a2.download = 'probabilities.csv'; a2.click();
+
+    await model.save('downloads://titanic-tfjs-model');
+    statusDiv.innerHTML = 'Export completed!';
+  } catch (error) {
+    statusDiv.innerHTML = `Error during export: ${error.message}`;
+    console.error(error);
+  }
 }
